@@ -36,7 +36,8 @@ A single AI response to "what do you think of this idea?" tends toward agreeable
 
 ## Screenshot
 
-*(Add a canvas screenshot here)*
+<img width="747" height="301" alt="image" src="https://github.com/user-attachments/assets/fda0f627-432f-4d9e-99b1-c832fb42fe53" />
+
 
 ## Sanitization note
 
