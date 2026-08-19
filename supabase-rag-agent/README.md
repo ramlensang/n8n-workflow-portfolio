@@ -33,7 +33,8 @@ A chat agent that can only answer from what it already knows is limited to gener
 
 ## Screenshot
 
-*(Add a canvas screenshot here)*
+<img width="572" height="337" alt="image" src="https://github.com/user-attachments/assets/8724bcb8-b348-4378-a156-94e1b269b375" />
+
 
 ## Sanitization note
 
