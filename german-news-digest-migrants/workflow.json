@@ -1,0 +1,310 @@
+{
+  "name": "German News Daily Digest \u2014 Migrants",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "c22f6ad1-ca81-43ed-acf3-7adf7a890777",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        3488,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.tagesschau.de/xml/rss2/",
+        "options": {}
+      },
+      "id": "eaa9d466-90ed-4421-8a81-214e82e6b4b9",
+      "name": "RSS: tagesschau",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        3712,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://rss.dw.com/rdf/rss-en-all",
+        "options": {}
+      },
+      "id": "92f6d3a9-f3c2-47d9-8a00-106b653c60ad",
+      "name": "RSS: DW English",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        3712,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://newsfeed.zeit.de/index",
+        "options": {}
+      },
+      "id": "80f47cec-2142-4128-94ef-788b293bff25",
+      "name": "RSS: Zeit Online",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        3712,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "dd63368a-54ca-472f-9a4d-c45c046b7e83",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3936,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// ponytail: keyword tiers, tune weights/terms here\nconst TIERS = [\n  { weight: 3, terms: [\n    'visa', 'visum', 'aufenthalt', 'asyl', 'migration', 'migrant',\n    'einb\u00fcrgerung', 'citizenship', 'integration', 'ausl\u00e4nder', 'foreigner',\n    'immigration', 'residence permit', 'work permit', 'arbeitserlaubnis',\n    'abschiebung', 'deportation'\n  ]},\n  { weight: 2, terms: [\n    'wohnung', 'miete', 'housing', 'rent', 'arbeitsmarkt', 'labor market',\n    'fachkr\u00e4fte', 'gesetz', 'law', 'bundestag', 'bundesrat', 'kranken',\n    'health insurance', 'b\u00fcrgergeld', 'mindestlohn', 'minimum wage',\n    'diskriminierung', 'racism', 'rassismus'\n  ]},\n  { weight: 1, terms: [\n    'regierung', 'government', 'koalition', 'steuer', 'tax',\n    'bahn', 'streik', 'strike', 'unwetter', 'storm', 'flut'\n  ]}\n];\n\nconst score = (title, snippet) => {\n  const t = title.toLowerCase();\n  const s = snippet.toLowerCase();\n  let total = 0;\n  for (const { weight, terms } of TIERS) {\n    for (const term of terms) {\n      if (t.includes(term)) total += weight * 2;   // title hit counts double\n      else if (s.includes(term)) total += weight;\n    }\n  }\n  return total;\n};\n\nconst cutoff = Date.now() - 48 * 60 * 60 * 1000;\n\nconst scored = items\n  .map(i => {\n    const title = i.json.title || '';\n    const snippet = (i.json.contentSnippet || i.json.summary || i.json.content || '')\n      .replace(/<[^>]+>/g, '').substring(0, 300);\n    const date = i.json.isoDate || i.json.pubDate || '';\n    return { title, snippet, link: i.json.link || '', date, ts: new Date(date || 0).getTime(), score: score(title, snippet) };\n  })\n  .filter(a => a.ts >= cutoff)                     // drop stale RSS backlog\n  .sort((a, b) => b.score - a.score || b.ts - a.ts); // score desc, then newest\n\nconst articles = scored.slice(0, 40).map(({ title, link, date, snippet }) => ({ title, link, date, snippet }));\n\nreturn [{ json: { articles } }];"
+      },
+      "id": "42f3c4fc-f549-4059-b949-d2a868d869ae",
+      "name": "Code: Collect",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4144,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Select the top 5 most relevant news articles for Asian migrants integrating in Germany. Articles:\\n\\n' + JSON.stringify($json.articles, null, 2) }}",
+        "options": {
+          "systemMessage": "You are a daily news curator for Asian migrants integrating into German society. Your readers are non-EU immigrants dealing with visas, integration courses, work permits, housing, and German bureaucracy.\n\nRules:\n- SKIP: celebrity gossip, entertainment, sports results, tabloid stories, foreign news unrelated to Germany\n- PRIORITIZE: immigration law changes, residence/visa rules, integration programs, labor market for foreigners, housing, healthcare access, discrimination cases, politics that affects non-EU residents, weather events disrupting daily life\n- Rate each article 1-10 for relevance to Asian migrants in Germany\n- Return ONLY the top 5 as a plain-text email digest in English (translate German titles/summaries)\n\nFormat each item exactly:\n\n[N]. [Title]\nSource & Date: [outlet + date]\nLink: [url from the article data]\nSummary: [2-3 sentences in English]\nWhy it matters: [1 sentence on relevance to migrants]\n\n---\n\nNo preamble. No JSON. Start directly with '1.'"
+        }
+      },
+      "id": "beb63f44-2a40-4081-9783-7863549ad36f",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        4368,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-sonnet-4-6",
+          "mode": "list",
+          "cachedResultName": "Claude Sonnet 4.6"
+        },
+        "options": {}
+      },
+      "id": "744cac1d-abc7-4792-8e23-0bcd8b296a2e",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        4368,
+        1328
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.output || '';\n\n// Split on --- separator between articles\nconst blocks = text.split(/\\n---\\n/).map(b => b.trim()).filter(Boolean);\n\nconst cards = blocks.map(block => {\n  const lines = block.split('\\n').filter(Boolean);\n  const titleLine = lines[0] || '';\n  const titleMatch = titleLine.match(/^\\d+\\.\\s+(.+)$/);\n  const title = titleMatch ? titleMatch[1].trim() : titleLine;\n\n  const get = label => {\n    const line = lines.find(l => l.toLowerCase().startsWith(label.toLowerCase()));\n    return line ? line.replace(/^[^:]+:\\s*/i, '').trim() : '';\n  };\n\n  const sourceDate = get('Source & Date:');\n  const link       = get('Link:');\n  const summary    = get('Summary:');\n  const why        = get('Why it matters:');\n  const readMore   = link ? `<a href=\"${link}\" style=\"display:inline-block;margin-top:12px;font-size:12px;color:#1a73e8;text-decoration:none;font-weight:600;\">Read article &rarr;</a>` : '';\n\n  return `<div style=\"margin-bottom:24px;padding:20px;background:#fff;border-radius:8px;border-left:4px solid #1a73e8;box-shadow:0 1px 3px rgba(0,0,0,.1);\">\n    <h3 style=\"margin:0 0 6px 0;font-size:16px;color:#1a1a1a;line-height:1.4;\">${title}</h3>\n    <p style=\"margin:0 0 10px 0;font-size:11px;color:#888;\">${sourceDate}</p>\n    <p style=\"margin:0 0 12px 0;font-size:14px;color:#333;line-height:1.6;\">${summary}</p>\n    <div style=\"background:#f0f4ff;padding:10px 14px;border-radius:4px;\">\n      <span style=\"font-size:12px;font-weight:700;color:#1a73e8;\">WHY IT MATTERS: </span>\n      <span style=\"font-size:12px;color:#444;\">${why}</span>\n    </div>\n    ${readMore}\n  </div>`;\n}).join('');\n\nconst today = DateTime.now().toFormat('MMMM d, yyyy');\n\nconst html = `<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head>\n<body style=\"margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">\n<div style=\"max-width:620px;margin:0 auto;padding:24px 16px;\">\n  <div style=\"background:#1a73e8;padding:24px;border-radius:8px 8px 0 0;text-align:center;\">\n    <h1 style=\"margin:0;color:#fff;font-size:22px;font-weight:600;\">Germany Daily Update</h1>\n    <p style=\"margin:6px 0 0 0;color:#c8dcff;font-size:13px;\">${today} &middot; Top 5 for migrants in Germany</p>\n  </div>\n  <div style=\"background:#e8f0fe;padding:14px 24px;margin-bottom:20px;\">\n    <p style=\"margin:0;font-size:13px;color:#444;\">Filtered from tagesschau, DW, and Zeit Online &mdash; curated for integration, visa, and daily life.</p>\n  </div>\n  ${cards}\n  <p style=\"text-align:center;font-size:11px;color:#aaa;margin-top:24px;\">Automated by n8n &middot; tagesschau &middot; DW &middot; Zeit Online</p>\n</div></body></html>`;\n\nreturn [{ json: { html } }];"
+      },
+      "id": "e92a3394-e594-4354-9e76-ca10c978ac07",
+      "name": "Code: Format HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4656,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@example.com, your-email@example.com, your-email@example.com , your-email@example.com, your-email@example.com ",
+        "subject": "={{ 'Germany Daily Update \u2014 ' + $now.toFormat('yyyy-MM-dd') }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "220b18cc-47ec-401b-9778-459255db7c8e",
+      "name": "Gmail: Send Digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        4816,
+        1104
+      ],
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## German News Daily Digest \u2014 Migrants\n\n**Runs:** 6:00 AM daily\n**Sources:** tagesschau \u00b7 DW English \u00b7 Zeit Online (RSS, no credentials needed)\n**Model:** claude-sonnet-4-20250514 \u2014 filters + ranks + translates in one pass\n**Digest to:** your-email@example.com\n\n**Filters out:** celebrity, entertainment, sports\n**Prioritizes:** visa/residence, integration, labor market, politics, weather\n\n**Zero setup needed** \u2014 all credentials already wired.",
+        "height": 240,
+        "width": 380
+      },
+      "id": "f8c1f349-b89d-495c-a5a1-d6096e4df45a",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3264,
+        896
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "RSS: tagesschau",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS: DW English",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS: Zeit Online",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS: tagesschau": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS: DW English": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "RSS: Zeit Online": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code: Collect",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Collect": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code: Format HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Format HTML": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Send Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3ef1c708-a367-44e5-9687-9c5c46f0b879",
+  "meta": {
+    "instanceId": "YOUR_INSTANCE_ID"
+  },
+  "nodeGroups": [],
+  "id": "rzOS3tEIkH9MzPPv",
+  "tags": []
+}
