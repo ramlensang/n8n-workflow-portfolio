@@ -31,7 +31,7 @@ Tracking daily developments across four fast-moving automotive technology areas 
 
 ## Screenshot
 
-*(Add a canvas screenshot here)*
+<img width="761" height="264" alt="image" src="https://github.com/user-attachments/assets/147a6243-6234-4994-8af1-749fc38e5fcb" />
 
 ## Sanitization note
 
