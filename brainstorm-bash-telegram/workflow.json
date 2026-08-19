@@ -1,0 +1,663 @@
+{
+  "name": "Brainstorm Bash \u2014 Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "dbcff77a-1d50-40a2-9d5f-fbaab548d9a9",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        6224,
+        3136
+      ],
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-serp-check",
+              "leftValue": "={{ $json.message.text }}",
+              "rightValue": "/search",
+              "operator": {
+                "type": "string",
+                "operation": "startsWith"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f70763cd-c5b8-4f88-8a02-e35a8dab576b",
+      "name": "IF: Use SERP?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6464,
+        3136
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "google_ai_mode",
+        "q": "={{ $('Telegram Trigger').item.json.message.text.replace(/^\\/search\\s+/i, '').trim() }}",
+        "additionalFields": {},
+        "requestOptions": {}
+      },
+      "id": "d6e5c304-1d36-4aa0-b67b-b28d8b0acaff",
+      "name": "SerpAPI: Search Idea",
+      "type": "n8n-nodes-serpapi.serpApi",
+      "typeVersion": 1,
+      "position": [
+        6736,
+        2976
+      ],
+      "credentials": {
+        "serpApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "SerpApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst telegramText = $('Telegram Trigger').item.json.message.text || '';\nconst idea = telegramText.replace(/^\\/search\\s+/i, '').trim();\n\nconst isSerp = !!(item.json.organic_results || item.json.text_blocks || item.json.references);\n\nlet serpContext = '';\nif (isSerp) {\n  const blocks = item.json.text_blocks || [];\n  const refs = item.json.references || [];\n  const organic = (item.json.organic_results || []).map(r => ({ title: r.title, snippet: r.snippet }));\n  const all = [...blocks, ...refs, ...organic].slice(0, 6);\n  serpContext = all.map(b => {\n    const title = b.title || '';\n    const snippet = b.snippet || b.text || b.body || '';\n    return title ? `**${title}**\\n${snippet}` : snippet;\n  }).filter(Boolean).join('\\n\\n');\n}\n\nreturn [{ json: { idea, serp_context: serpContext, has_serp: isSerp } }];"
+      },
+      "id": "14bf3cf5-9eec-46a8-9f37-1c9dec93142c",
+      "name": "Code: Prepare Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6992,
+        3136
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'IDEA:\\n' + $json.idea + ($json.has_serp ? '\\n\\nWEB CONTEXT (for reference):\\n' + $json.serp_context : '') }}",
+        "options": {
+          "systemMessage": "You are a Devil's Advocate. Your only job is to find every hole, false assumption, and worst-case scenario in the idea. Do not validate anything. Be specific and concrete \u2014 no generic objections.\n\nRespond in this exact format:\n\n**DEVIL'S ADVOCATE**\n\n**Objection 1 \u2014 [Label]:** [2-3 sentences explaining exactly why this is a problem]\n\n**Objection 2 \u2014 [Label]:** [2-3 sentences]\n\n**Objection 3 \u2014 [Label]:** [2-3 sentences]\n\n(Add up to 2 more if warranted)\n\n**Fatal Flaw:** [The single biggest problem in one sentence.]"
+        }
+      },
+      "id": "7b86f591-f0df-4bb7-852a-82c08fc6ad2a",
+      "name": "Agent: Devil's Advocate",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        7296,
+        2896
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-20250514"
+        },
+        "options": {}
+      },
+      "id": "6561c61c-65f1-4def-94b7-12b037599c6f",
+      "name": "LM: Devil",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        7376,
+        3120
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Samantha 2.0"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'IDEA:\\n' + $json.idea + ($json.has_serp ? '\\n\\nWEB CONTEXT (for reference):\\n' + $json.serp_context : '') }}",
+        "options": {
+          "systemMessage": "You are a seasoned operator and builder. You don't care about vision \u2014 you care about what breaks first, hidden dependencies, and what the minimum viable version actually looks like.\n\nRespond in this exact format:\n\n**PRAGMATIST**\n\n**What breaks first:** [2-3 sentences on the first thing that will fail in practice]\n\n**Hidden dependencies:** [2-3 sentences on what the person hasn't accounted for]\n\n**Minimum viable version:** [2-3 sentences on the bare-minimum version that could actually be built]\n\n**Realistic timeline & resources:** [1-2 sentences with a concrete estimate]"
+        }
+      },
+      "id": "06d1a6fd-cabc-44aa-aba9-98bae69d19a4",
+      "name": "Agent: Pragmatist",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        7296,
+        3104
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-20250514"
+        },
+        "options": {}
+      },
+      "id": "9a34f503-a2cd-42b2-abc7-b236b5395021",
+      "name": "LM: Pragmatist",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        7376,
+        3312
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Samantha 2.0"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'IDEA:\\n' + $json.idea + ($json.has_serp ? '\\n\\nWEB CONTEXT (for reference):\\n' + $json.serp_context : '') }}",
+        "options": {
+          "systemMessage": "You are a first-principles thinker. You strip away analogies, conventions, and received wisdom to find what is actually true.\n\nRespond in this exact format:\n\n**FIRST PRINCIPLES**\n\n**Underlying assumptions:** [List the key assumptions this idea rests on, 3-5 items as bullet points]\n\n**Which assumptions are false or unverified:** [2-3 sentences, be specific]\n\n**Core insight (if any):** [1-2 sentences \u2014 what's the kernel of truth here, if there is one]\n\n**Reframe:** [2-3 sentences \u2014 a cleaner version of the idea stripped of flawed assumptions]"
+        }
+      },
+      "id": "dba59973-7bd0-4ca3-bc51-39d05e8755b3",
+      "name": "Agent: First Principles",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        7296,
+        3296
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-20250514"
+        },
+        "options": {}
+      },
+      "id": "f2c5e9f6-89bd-4a53-a0c9-b690c37749c8",
+      "name": "LM: First Principles",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        7376,
+        3520
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Samantha 2.0"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'IDEA:\\n' + $json.idea + ($json.has_serp ? '\\n\\nWEB CONTEXT (for reference):\\n' + $json.serp_context : '') }}",
+        "options": {
+          "systemMessage": "You are a market analyst and competitive intelligence expert. You situate ideas in the real world \u2014 who's doing this, who tried and failed, and what forces are at play.\n\nRespond in this exact format:\n\n**MARKET REALIST**\n\n**Prior art / who tried this:** [2-3 sentences, name specific companies or products]\n\n**Current incumbents or alternatives:** [2-3 sentences, name specific players]\n\n**Tailwinds (forces FOR this):** [2-3 sentences on what market conditions favor this idea]\n\n**Headwinds (forces AGAINST this):** [2-3 sentences on what will push back]"
+        }
+      },
+      "id": "62b0866d-cb61-4e5d-8dd4-02eb9ec67746",
+      "name": "Agent: Market Realist",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        7296,
+        3504
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-20250514"
+        },
+        "options": {}
+      },
+      "id": "2e3cb471-bfbd-47d4-a0be-08039cabafc8",
+      "name": "LM: Market Realist",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        7376,
+        3712
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Samantha 2.0"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "d51a8dca-25d6-4fe3-a676-bf73dff73901",
+      "name": "Merge: All Personas",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        7584,
+        3200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst personaOutputs = items.map(i => i.json.output || '').join('\\n\\n---\\n\\n');\nconst prep = $('Code: Prepare Context').first().json;\nreturn [{ json: { idea: prep.idea, serp_context: prep.serp_context || '', persona_outputs: personaOutputs } }];"
+      },
+      "id": "7c3a1fde-69e9-4d82-8dfd-f0820876448c",
+      "name": "Code: Aggregate Personas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7824,
+        3200
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'ORIGINAL IDEA:\\n' + $json.idea + '\\n\\n=== ANALYST CRITIQUES ===\\n\\n' + $json.persona_outputs }}",
+        "options": {
+          "systemMessage": "You are a strategic synthesizer. You receive an original idea and four analyst critiques. Produce a sharper, stress-tested version of the idea.\n\nReturn a JSON object (no markdown fences, no preamble) with these exact fields:\n- original_summary: string (one sentence capturing the raw idea)\n- critiques_upheld: array of strings (objections that genuinely landed)\n- critiques_dismissed: array of strings (objections that were weak or irrelevant)\n- refined_idea: string (2-3 paragraphs: the improved idea incorporating valid critiques)\n- next_actions: array of 3-5 strings (concrete, specific next steps)\n- confidence: string (\"low\", \"medium\", or \"high\" + one sentence rationale)\n- one_liner: string (sharpest one-sentence version of the refined idea)\n\nReturn only valid JSON."
+        }
+      },
+      "id": "647f8c03-bae6-4291-ad32-c41f8344cbec",
+      "name": "Agent: Synthesizer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        8096,
+        3200
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-20250514"
+        },
+        "options": {}
+      },
+      "id": "8d0671a5-90ab-4167-a189-598056f7670a",
+      "name": "LM: Synthesizer",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        8176,
+        3424
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Samantha 2.0"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nlet raw = (item.json.output || '').trim();\nconst fence = raw.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/);\nif (fence) raw = fence[1].trim();\nconst prep = $('Code: Aggregate Personas').first().json;\ntry {\n  const parsed = JSON.parse(raw);\n  return [{ json: { ...parsed, idea: prep.idea, persona_outputs: prep.persona_outputs } }];\n} catch(_) {\n  return [{ json: {\n    _parse_error: true,\n    idea: prep.idea,\n    persona_outputs: prep.persona_outputs,\n    one_liner: 'See raw output',\n    original_summary: prep.idea,\n    refined_idea: raw,\n    next_actions: [],\n    critiques_upheld: [],\n    critiques_dismissed: [],\n    confidence: 'unknown'\n  } }];\n}"
+      },
+      "id": "4a31d631-1932-484a-b73b-37eb1a25cc05",
+      "name": "Code: Parse Synthesis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8352,
+        3200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst today = DateTime.now().toFormat('yyyy-MM-dd');\nconst slug = (d.one_liner || d.original_summary || 'brainstorm')\n  .toLowerCase().replace(/[^a-z0-9\\s-]/g, '').trim()\n  .replace(/\\s+/g, '-').substring(0, 80);\nconst filename = `${today}-${slug}.md`;\n\nconst nextActions = Array.isArray(d.next_actions)\n  ? d.next_actions.map(a => `- [ ] ${a}`).join('\\n')\n  : '';\nconst upheld = Array.isArray(d.critiques_upheld)\n  ? d.critiques_upheld.map(c => `- ${c}`).join('\\n')\n  : '';\nconst dismissed = Array.isArray(d.critiques_dismissed)\n  ? d.critiques_dismissed.map(c => `- ${c}`).join('\\n')\n  : '';\nconst nextList = Array.isArray(d.next_actions)\n  ? d.next_actions.map((a, i) => `${i + 1}. ${a}`).join('\\n')\n  : '';\n\nconst content = `---\ntitle: \"${(d.original_summary || '').replace(/\"/g, \"'\")}\"\ntype: brainstorm\ncreated: ${today}\nupdated: ${today}\nconfidence: \"${d.confidence || 'unknown'}\"\none_liner: \"${(d.one_liner || '').replace(/\"/g, \"'\")}\"\n---\n\n## Raw Idea\n${d.idea || ''}\n\n## Refined Idea\n${d.refined_idea || ''}\n\n## One-Liner\n${d.one_liner || ''}\n\n## Critiques That Landed\n${upheld}\n\n## Critiques Dismissed\n${dismissed}\n\n## Next Actions\n${nextActions}\n\n---\n\n## Full Persona Debate\n\n${d.persona_outputs || ''}`;\n\nconst telegramReply = `\ud83d\udca1 *${d.one_liner || d.original_summary || ''}*\\n\\n${(d.refined_idea || '').substring(0, 600)}\\n\\n*Next steps:*\\n${nextList}\\n\\n_Confidence: ${d.confidence || 'unknown'} \u00b7 Saved to vault_`;\n\nreturn [{ json: { filename, content, telegram_reply: telegramReply } }];"
+      },
+      "id": "d74d29a0-a23b-4569-a1be-d1beabc957b7",
+      "name": "Code: Format Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8608,
+        3200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "value": "ramlensang",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "sang-s-wiki",
+          "mode": "name"
+        },
+        "filePath": "={{ 'AIOS/Brainstorms/' + $json.filename }}",
+        "fileContent": "={{ $json.content }}",
+        "commitMessage": "={{ 'brainstorm: ' + $json.filename }}"
+      },
+      "id": "189e0369-3ef2-49dd-93bf-0edf9a5d8d1e",
+      "name": "GitHub: Write Brainstorm",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [
+        8864,
+        3072
+      ],
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "githubApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "GitHub account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.telegram_reply }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "fc9f034c-e68f-44c7-86c5-c5a9c65a6fbc",
+      "name": "Telegram: Send Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        8864,
+        3312
+      ],
+      "webhookId": "YOUR_WEBHOOK_ID"
+    },
+    {
+      "parameters": {
+        "content": "## Brainstorm Bash \u2014 Telegram\n\n**Trigger:** Send any message to your Telegram bot\n- Plain message \u2192 goes straight to agents\n- `/search [your idea]` \u2192 SerpAPI grounds agents with live web context first\n\n**Agents (parallel):**\n1. Devil's Advocate \u2014 hunts every flaw\n2. Pragmatist \u2014 stress-tests execution\n3. First Principles \u2014 strips assumptions\n4. Market Realist \u2014 situates in reality\n5. Synthesizer \u2014 refines into v2 + next actions\n\n**Output:**\n- Obsidian note \u2192 `AIOS/Brainstorms/YYYY-MM-DD-slug.md`\n- Telegram reply with refined idea + next steps\n\n### Setup Checklist\n- [ ] Add Telegram credential to both Telegram nodes (replace REPLACE_ME)\n- [ ] Confirm GitHub credential (reused from Automotive Intel)\n- [ ] Send a test message to your bot\n- [ ] Activate workflow",
+        "height": 400,
+        "width": 460
+      },
+      "id": "936839c9-f365-4ce5-bc1b-0ab7521b13db",
+      "name": "Setup Guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        6224,
+        2672
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "IF: Use SERP?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Use SERP?": {
+      "main": [
+        [
+          {
+            "node": "SerpAPI: Search Idea",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code: Prepare Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpAPI: Search Idea": {
+      "main": [
+        [
+          {
+            "node": "Code: Prepare Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prepare Context": {
+      "main": [
+        [
+          {
+            "node": "Agent: Devil's Advocate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Agent: Pragmatist",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Agent: First Principles",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Agent: Market Realist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LM: Devil": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent: Devil's Advocate",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LM: Pragmatist": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent: Pragmatist",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LM: First Principles": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent: First Principles",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LM: Market Realist": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent: Market Realist",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent: Devil's Advocate": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Personas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent: Pragmatist": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Personas",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Agent: First Principles": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Personas",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Agent: Market Realist": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Personas",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge: All Personas": {
+      "main": [
+        [
+          {
+            "node": "Code: Aggregate Personas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Aggregate Personas": {
+      "main": [
+        [
+          {
+            "node": "Agent: Synthesizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LM: Synthesizer": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent: Synthesizer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent: Synthesizer": {
+      "main": [
+        [
+          {
+            "node": "Code: Parse Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Parse Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Code: Format Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Format Markdown": {
+      "main": [
+        [
+          {
+            "node": "GitHub: Write Brainstorm",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Telegram: Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "ed775f19-7668-4ae0-a66f-78fbf4660095",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_INSTANCE_ID"
+  },
+  "nodeGroups": [],
+  "id": "nYEBH6wsZgw5Z0L9",
+  "tags": []
+}
