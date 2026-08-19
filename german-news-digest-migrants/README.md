@@ -28,7 +28,8 @@ Non-EU migrants integrating into Germany need to track visa/residence law change
 
 ## Screenshot
 
-*(Add a canvas screenshot here)*
+<img width="638" height="318" alt="image" src="https://github.com/user-attachments/assets/4618b57f-9237-473d-a05c-11335fec327d" />
+
 
 ## Sanitization note
 
