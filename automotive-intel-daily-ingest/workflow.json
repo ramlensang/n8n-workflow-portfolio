@@ -1,0 +1,606 @@
+{
+  "name": "Automotive Intel Daily Ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "2d0bce5f-bea2-4a84-970f-c4036f925c94",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -224,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "google_ai_mode",
+        "q": "SDV zonal architecture automotive 2025",
+        "additionalFields": {},
+        "requestOptions": {}
+      },
+      "id": "35bfa3a2-00c3-412b-b601-039d7eb0deca",
+      "name": "SerpAPI: SDV Zonal",
+      "type": "n8n-nodes-serpapi.serpApi",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "serpApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "SerpApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "google_ai_mode",
+        "q": "SiC semiconductor automotive trends 2025",
+        "additionalFields": {},
+        "requestOptions": {}
+      },
+      "id": "a334fefb-f029-4cc2-b033-f2709c933054",
+      "name": "SerpAPI: SiC Semiconductor",
+      "type": "n8n-nodes-serpapi.serpApi",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "credentials": {
+        "serpApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "SerpApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "google_ai_mode",
+        "q": "ADAS sensor fusion autonomous driving 2025",
+        "additionalFields": {},
+        "requestOptions": {}
+      },
+      "id": "6d156a23-bf43-4bdb-96eb-68457a340619",
+      "name": "SerpAPI: ADAS Sensor Fusion",
+      "type": "n8n-nodes-serpapi.serpApi",
+      "typeVersion": 1,
+      "position": [
+        0,
+        384
+      ],
+      "credentials": {
+        "serpApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "SerpApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "google_ai_mode",
+        "q": "EV battery management system eMobility 2025",
+        "additionalFields": {},
+        "requestOptions": {}
+      },
+      "id": "43c422e3-0ff2-4c87-a8cb-11cb08bca71d",
+      "name": "SerpAPI: EV Battery",
+      "type": "n8n-nodes-serpapi.serpApi",
+      "typeVersion": 1,
+      "position": [
+        0,
+        576
+      ],
+      "credentials": {
+        "serpApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "SerpApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "7adf1523-bfc4-444d-9099-c65f593be0cd",
+      "name": "Merge: All Search Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        224,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const blocks = d.text_blocks || [];\n  const refs = d.references || [];\n\n  // Extract from text_blocks\n  for (const b of blocks) {\n    const snippet = b.snippet || b.text || b.body || '';\n    const title = b.title || b.heading || '';\n    const url = b.link || b.url || '';\n    if (!snippet && !title) continue;\n    results.push({\n      title,\n      url,\n      snippet,\n      source: url ? (() => { try { return new URL(url).hostname; } catch(_) { return ''; } })() : '',\n      date: b.date || ''\n    });\n  }\n\n  // Extract from references\n  for (const r of refs) {\n    const url = r.link || r.url || '';\n    const title = r.title || r.heading || '';\n    const snippet = r.snippet || r.text || r.body || '';\n    if (!url && !title) continue;\n    results.push({\n      title,\n      url,\n      snippet,\n      source: url ? (() => { try { return new URL(url).hostname; } catch(_) { return ''; } })() : '',\n      date: r.date || ''\n    });\n  }\n}\n\nconst seen = new Set();\nconst deduped = results.filter(r => {\n  const key = r.url || r.title;\n  if (!key || seen.has(key)) return false;\n  seen.add(key);\n  return true;\n});\n\nreturn [{ json: { results: deduped, count: deduped.length } }];"
+      },
+      "id": "b1c8d2dd-0b51-4fd7-a069-aeccd5588b81",
+      "name": "Code: Normalize Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Analyze these automotive technology search results and return the structured JSON array as instructed:\\n\\n' + JSON.stringify($json.results, null, 2) }}",
+        "options": {
+          "systemMessage": "You are an automotive technology research analyst. You receive a list of search results and must return a JSON array. Each item must have exactly these fields:\n- title: string\n- domain: array, values from [sdv, adas, emobility, auto-semi]\n- tags: array of 3-5 lowercase keyword strings\n- summary: 3-4 sentence technical summary\n- key_claims: array of 4-6 bullet strings\n- entities: array of named companies, platforms, or standards bodies mentioned\n- concepts: array of technical concepts or architectures mentioned\n- open_questions: string, one paragraph on what this source leaves unanswered\n- evergreen: boolean, true if the insight is durable beyond 3 months\n\nReturn only a JSON array. No preamble, no markdown fences."
+        }
+      },
+      "id": "34be1758-f7b4-4d3e-b42a-afcbce9851b6",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "claude-sonnet-4-20250514"
+        },
+        "options": {}
+      },
+      "id": "cc7c473f-6f37-4583-96be-de96e090b761",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        752,
+        464
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Samantha 2.0"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  let raw = (item.json.output || '').trim();\n  const fenceMatch = raw.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/);\n  if (fenceMatch) raw = fenceMatch[1].trim();\n  try {\n    const parsed = JSON.parse(raw);\n    const arr = Array.isArray(parsed) ? parsed : [parsed];\n    arr.forEach((entry, i) => results.push({ json: entry, pairedItem: { item: 0 } }));\n  } catch (_) {}\n}\n\nreturn results.length > 0 ? results : [{ json: { _empty: true } }];"
+      },
+      "id": "98fe18fc-4ec9-42c8-8b2c-b0f6a727fb3a",
+      "name": "Code: Parse AI Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f1111111-1111-1111-1111-111111111111",
+              "leftValue": "={{ $json.title }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "f2222222-2222-2222-2222-222222222222",
+              "leftValue": "={{ $json.summary }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "f3333333-3333-3333-3333-333333333333",
+              "leftValue": "={{ Array.isArray($json.key_claims) && $json.key_claims.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f2309868-6157-4fa8-9cb8-3607944ae69a",
+      "name": "Filter: Required Fields",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst today = DateTime.now().toFormat('yyyy-MM-dd');\n\nreturn items.map((item, idx) => {\n  const d = item.json;\n  const slug = (d.title || 'untitled')\n    .toLowerCase().replace(/[^a-z0-9\\s-]/g, '').trim()\n    .replace(/\\s+/g, '-').substring(0, 80);\n  const filename = `${today}-${slug}.md`;\n  const domains = Array.isArray(d.domain) ? d.domain.join(', ') : (d.domain || '');\n  const tags    = Array.isArray(d.tags)   ? d.tags.join(', ')   : (d.tags || '');\n  const keyClaims = (Array.isArray(d.key_claims) ? d.key_claims : []).map(c => `- ${c}`).join('\\n');\n  const entities  = (Array.isArray(d.entities)   ? d.entities  : []).map(e => `[[${e}]]`).join(', ');\n  const concepts  = (Array.isArray(d.concepts)   ? d.concepts  : []).map(c => `[[${c}]]`).join(', ');\n  const evergreen = d.evergreen === true ? 'true' : 'false';\n\n  const content = `---\\ntitle: \"${d.title}\"\\ntype: source\\ndomain: [${domains}]\\ntags: [${tags}]\\ncreated: ${today}\\nupdated: ${today}\\nsource_type: article\\nevergreen: ${evergreen}\\n---\\n\\n## Summary\\n${d.summary}\\n\\n## Key Claims\\n${keyClaims}\\n\\n## Key Entities\\n${entities}\\n\\n## Key Concepts\\n${concepts}\\n\\n## Gaps / Open Questions\\n${d.open_questions}`;\n\n  return { json: { filename, content }, pairedItem: { item: idx } };\n});"
+      },
+      "id": "dc39ab4a-2635-4a68-ac60-608958a790c8",
+      "name": "Code: Format Markdown",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst sd = $getWorkflowStaticData('global');\nsd.filenames = items.map(i => i.json.filename);\nsd.count = items.length;\nreturn items;"
+      },
+      "id": "52d42be5-15ba-455b-8916-a49a8d96df8b",
+      "name": "Code: Init Static Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "719d76fb-3d7b-404d-a612-538bf82f7047",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1920,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "value": "ramlensang",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "sang-s-wiki",
+          "mode": "name"
+        },
+        "filePath": "={{ 'raw/articles/' + $json.filename }}",
+        "fileContent": "={{ $json.content }}",
+        "commitMessage": "={{ 'pipeline: ingest ' + $json.filename }}"
+      },
+      "id": "30db2b96-6f4c-4676-a126-7cc68ca7e351",
+      "name": "GitHub: Write Article",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [
+        2144,
+        144
+      ],
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "githubApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "GitHub account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "67222629-6da3-4310-8e71-db8d245f8855",
+      "name": "Limit 1",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        2144,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sd = $getWorkflowStaticData('global');\nconst count = sd.count || 0;\nconst filenames = sd.filenames || [];\nconst today = DateTime.now().toFormat('yyyy-MM-dd');\nconst fileList = filenames.map(f => `\u2022 ${f}`).join('\\n');\nconst body = `Automotive Intel Digest \u2014 ${today}\\n\\n${count} article(s) written to sangs-wiki/raw/articles/\\n\\n${fileList}`;\nsd.count = 0;\nsd.filenames = [];\nreturn [{ json: { body, count, date: today } }];"
+      },
+      "id": "f565186a-63bf-48b0-ab7b-d534abd585cd",
+      "name": "Code: Build Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2368,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@example.com",
+        "subject": "={{ 'Automotive Intel Digest \u2014 ' + $json.date + ' (' + $json.count + ' articles)' }}",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "1096f0bd-ce9c-445e-9959-1632063a6dc9",
+      "name": "Gmail: Send Digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2592,
+        336
+      ],
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "content": "## Automotive Intel Daily Ingest\n\n**Runs:** 8:00 AM daily\n**Searches:** SDV Zonal \u00b7 SiC Semiconductor \u00b7 ADAS Sensor Fusion \u00b7 EV Battery\n**Model:** claude-sonnet-4-20250514 via Samantha 2.0\n**Writes to:** github.com/ramlensang/sangs-wiki \u2192 raw/articles/\n**Digest to:** your-email@example.com\n\n### Setup Steps (After Import)\n\n**1. GitHub Credential**\n   \u2022 Open **GitHub: Write Article** node\n   \u2022 Replace \"GitHub account\" placeholder with your saved GitHub PAT credential\n\n**2. Test Run (GitHub + Gmail DISABLED)**\n   \u2022 Both nodes start disabled \u2014 run workflow manually\n   \u2022 Inspect **Code: Format Markdown** output to verify markdown shape\n\n**3. Enable GitHub Only**\n   \u2022 Enable **GitHub: Write Article** node\n   \u2022 Run once, confirm file appears in ramlensang/sangs-wiki/raw/articles/\n\n**4. Enable Gmail**\n   \u2022 Enable **Gmail: Send Digest** node\n   \u2022 Do a full run, confirm digest email arrives\n\n**5. Activate Workflow**\n   \u2022 Once verified, activate for daily 8 AM runs\n\n### Notes\n- Files are date-prefixed (YYYY-MM-DD-slug.md) \u2014 unique per day\n- Re-running same day will fail on already-created files\n  (switch to `edit` operation if you need idempotent re-runs)",
+        "height": 520,
+        "width": 480
+      },
+      "id": "3b76d8c3-a897-4383-836c-fe2a525e5061",
+      "name": "Setup Guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -624,
+        -320
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "SerpAPI: SDV Zonal",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SerpAPI: SiC Semiconductor",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SerpAPI: ADAS Sensor Fusion",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SerpAPI: EV Battery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpAPI: SDV Zonal": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpAPI: SiC Semiconductor": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Search Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "SerpAPI: ADAS Sensor Fusion": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Search Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "SerpAPI: EV Battery": {
+      "main": [
+        [
+          {
+            "node": "Merge: All Search Results",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge: All Search Results": {
+      "main": [
+        [
+          {
+            "node": "Code: Normalize Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Normalize Results": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code: Parse AI Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Parse AI Output": {
+      "main": [
+        [
+          {
+            "node": "Filter: Required Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Required Fields": {
+      "main": [
+        [
+          {
+            "node": "Code: Format Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Format Markdown": {
+      "main": [
+        [
+          {
+            "node": "Code: Init Static Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Init Static Data": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "Limit 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "GitHub: Write Article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub: Write Article": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit 1": {
+      "main": [
+        [
+          {
+            "node": "Code: Build Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build Digest": {
+      "main": [
+        [
+          {
+            "node": "Gmail: Send Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "91411c11-6325-4a64-a811-e14fa0f5775c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_INSTANCE_ID"
+  },
+  "nodeGroups": [],
+  "id": "wDY3B7lzLW1pKUnl",
+  "tags": []
+}
